@@ -16,4 +16,7 @@ export default {
     },
   },
   plugins: [daisyui],
+  daisyui: {
+    themes: true, // enables all themes
+  },
 } satisfies Config;

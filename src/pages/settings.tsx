@@ -5,6 +5,7 @@ import BottomNav from '@/components/BottomNav';
 import SearchDrawer from '@/components/SearchDrawer';
 import { useAppDispatch, useAppSelector } from '@/hooks/redux';
 import { setTheme } from '@/store/themeSlice';
+import type { RootState } from '@/store/store';
 
 const themes = [
   'light', 'dark', 'cupcake', 'bumblebee', 'emerald', 'corporate', 
@@ -17,7 +18,7 @@ const themes = [
 export default function Settings() {
   const [isSearchDrawerOpen, setIsSearchDrawerOpen] = useState(false);
   const dispatch = useAppDispatch();
-  const currentTheme = useAppSelector((state) => state.theme.current);
+  const currentTheme = useAppSelector((state: RootState) => state.theme.current);
 
   return (
     <div className="min-h-screen bg-base-100">

@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { useAppSelector } from "@/hooks/redux";
 import type { RootState } from '@/store/store';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { SessionProvider } from 'next-auth/react';
 
 const queryClient = new QueryClient();
 
@@ -21,14 +22,16 @@ function ThemeInitializer({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-export default function App({ Component, pageProps }: AppProps) {
+export default function App({ Component, pageProps: { session, ...pageProps } }: AppProps) {
   return (
-    <Provider store={store}>
-      <QueryClientProvider client={queryClient}>
-        <ThemeInitializer>
-          <Component {...pageProps} />
-        </ThemeInitializer>
-      </QueryClientProvider>
-    </Provider>
+    <SessionProvider session={session}>
+      <Provider store={store}>
+        <QueryClientProvider client={queryClient}>
+          <ThemeInitializer>
+            <Component {...pageProps} />
+          </ThemeInitializer>
+        </QueryClientProvider>
+      </Provider>
+    </SessionProvider>
   );
 }

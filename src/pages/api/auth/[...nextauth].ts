@@ -1,10 +1,8 @@
 import { NextAuthOptions } from 'next-auth';
-import { PrismaAdapter } from '@auth/prisma-adapter';
-import prisma from '@/lib/prisma';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import { compare } from 'bcrypt';
 import NextAuth from 'next-auth';
 import { decode } from 'jsonwebtoken';
+import { supabase, createAdminClient } from '@/lib/supabase';
 
 if (!process.env.NEXTAUTH_SECRET) {
   throw new Error('Please provide NEXTAUTH_SECRET environment variable');
@@ -13,7 +11,6 @@ if (!process.env.NEXTAUTH_SECRET) {
 const secret = process.env.NEXTAUTH_SECRET;
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
   secret: secret,
   session: {
     strategy: 'jwt',
@@ -52,42 +49,53 @@ export const authOptions: NextAuthOptions = {
 
             console.log('Decoded token:', decoded);
 
-            const user = await prisma.user.findUnique({
-              where: {
-                email: decoded.email,
-              },
-            });
+            const supabaseAdmin = createAdminClient();
+            // Check if user exists in Supabase auth by email
+            const { data: users, error: userError } = await supabaseAdmin.auth.admin.listUsers();
 
-            if (!user) {
+            if (userError) {
+              console.error('Error fetching users:', userError);
+              throw new Error('Error fetching users');
+            }
+
+            const existingUser = users.users.find(u => u.email === decoded.email);
+
+            if (!existingUser) {
               console.log('Creating new user with data:', {
-                id: decoded.id,
                 email: decoded.email,
                 name: decoded.name || decoded.email.split('@')[0],
               });
 
               // Create user if doesn't exist
-              const newUser = await prisma.user.create({
-                data: {
-                  id: decoded.id,
-                  email: decoded.email,
+              const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+                email: decoded.email,
+                email_confirm: true,
+                user_metadata: {
                   name: decoded.name || decoded.email.split('@')[0],
-                  updatedAt: new Date(),
                 },
+                app_metadata: {
+                  provider: 'external',
+                }
               });
 
-              console.log('New user created:', newUser);
+              if (createError || !newUser.user) {
+                console.error('Error creating user:', createError);
+                throw new Error('Error creating user');
+              }
+
+              console.log('New user created:', newUser.user);
               return {
-                id: newUser.id,
-                email: newUser.email,
-                name: newUser.name,
+                id: newUser.user.id,
+                email: newUser.user.email!,
+                name: newUser.user.user_metadata?.name,
               };
             }
 
-            console.log('Existing user found:', user);
+            console.log('Existing user found:', existingUser);
             return {
-              id: user.id,
-              email: user.email,
-              name: user.name,
+              id: existingUser.id,
+              email: existingUser.email!,
+              name: existingUser.user_metadata?.name,
             };
           } catch (error) {
             console.error('Token processing failed. Error details:', error);
@@ -103,26 +111,20 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Password is required');
         }
 
-        const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email,
-          },
+        // Sign in with email and password
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email: credentials.email,
+          password: credentials.password,
         });
 
-        if (!user || !user.password) {
-          throw new Error('Email does not exist');
-        }
-
-        const isValid = await compare(credentials.password, user.password);
-
-        if (!isValid) {
-          throw new Error('Invalid password');
+        if (signInError || !data.user) {
+          throw new Error('Invalid email or password');
         }
 
         return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
+          id: data.user.id,
+          email: data.user.email!,
+          name: data.user.user_metadata?.name,
         };
       },
     }),

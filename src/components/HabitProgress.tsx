@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Database } from '@/types/supabase';
-import { Check, X, Loader2 } from 'lucide-react';
-import { format, startOfWeek, addDays, isSameDay } from 'date-fns';
+import { format, startOfDay, subDays } from 'date-fns';
 
-type Habit = Database['public']['Tables']['habit']['Row'];
+type Habit = Database['public']['Tables']['habit']['Row'] & {
+  category: Database['public']['Tables']['habit_categories']['Row'] | null;
+};
+
 type HabitRecord = Database['public']['Tables']['habit_records']['Row'];
 
 interface HabitProgressProps {
@@ -12,10 +14,7 @@ interface HabitProgressProps {
 
 export default function HabitProgress({ habit }: HabitProgressProps) {
   const [records, setRecords] = useState<HabitRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [value, setValue] = useState(1);
-  const [notes, setNotes] = useState('');
+  const [todayRecord, setTodayRecord] = useState<HabitRecord | null>(null);
 
   useEffect(() => {
     fetchRecords();
@@ -23,140 +22,173 @@ export default function HabitProgress({ habit }: HabitProgressProps) {
 
   async function fetchRecords() {
     try {
-      const startDate = startOfWeek(new Date());
-      const response = await fetch(
-        `/api/habit-records?habit_id=${habit.id}&start_date=${format(startDate, 'yyyy-MM-dd')}`
-      );
-      
+      const startDate = format(subDays(new Date(), 90), 'yyyy-MM-dd');
+      const response = await fetch(`/api/habit-records?habit_id=${habit.id}&start_date=${startDate}`);
       if (!response.ok) throw new Error('Failed to fetch records');
-      
       const data = await response.json();
       setRecords(data);
+
+      // Find today's record
+      const today = startOfDay(new Date()).toISOString();
+      const todayRec = data.find((r: HabitRecord) => 
+        startOfDay(new Date(r.date)).toISOString() === today
+      );
+      setTodayRecord(todayRec);
     } catch (error) {
       console.error('Error fetching records:', error);
-    } finally {
-      setLoading(false);
     }
   }
 
-  async function handleRecordProgress() {
+  async function handleToggleToday() {
     try {
-      const response = await fetch('/api/habit-records', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          habit_id: habit.id,
-          date: format(selectedDate, 'yyyy-MM-dd'),
-          value,
-          notes,
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to record progress');
-
-      setValue(1);
-      setNotes('');
+      if (todayRecord) {
+        // Delete today's record
+        const response = await fetch(`/api/habit-records?id=${todayRecord.id}`, {
+          method: 'DELETE',
+        });
+        if (!response.ok) throw new Error('Failed to delete record');
+      } else {
+        // Create new record for today
+        const response = await fetch('/api/habit-records', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            habit_id: habit.id,
+            date: new Date().toISOString(),
+            value: 1,
+          }),
+        });
+        if (!response.ok) throw new Error('Failed to create record');
+      }
       fetchRecords();
     } catch (error) {
-      console.error('Error recording progress:', error);
+      console.error('Error updating record:', error);
     }
   }
 
-  function getWeekDays() {
-    const start = startOfWeek(new Date());
-    return Array.from({ length: 7 }, (_, i) => {
-      const date = addDays(start, i);
-      const record = records.find(r => 
-        isSameDay(new Date(r.date), date)
-      );
-      return { date, record };
-    });
+  // Generate last 90 days for activity graph
+  const days = Array.from({ length: 90 }, (_, i) => {
+    const date = subDays(new Date(), 89 - i);
+    const record = records.find(r => 
+      startOfDay(new Date(r.date)).toISOString() === startOfDay(date).toISOString()
+    );
+    return {
+      date,
+      value: record?.value || 0,
+      isToday: startOfDay(date).toISOString() === startOfDay(new Date()).toISOString(),
+    };
+  });
+
+  // Group days by week for the grid layout
+  const weeks = Array.from({ length: 13 }, (_, i) => 
+    days.slice(i * 7, (i + 1) * 7)
+  );
+
+  // Calculate completion rate
+  const completedDays = records.length;
+  const totalDays = 90;
+  const completionRate = (completedDays / totalDays) * 100;
+
+  // Get current streak
+  let currentStreak = 0;
+  let i = days.length - 1;
+  while (i >= 0 && days[i].value > 0) {
+    currentStreak++;
+    i--;
   }
 
-  const weekDays = getWeekDays();
+  // Get longest streak
+  let longestStreak = 0;
+  let currentCount = 0;
+  days.forEach(day => {
+    if (day.value > 0) {
+      currentCount++;
+      longestStreak = Math.max(longestStreak, currentCount);
+    } else {
+      currentCount = 0;
+    }
+  });
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">Progress Tracking</h3>
-        <div className="badge badge-primary">{habit.frequency}</div>
+      {/* Today's Progress */}
+      <div className="card bg-base-200 p-4">
+        <h4 className="font-medium mb-4">Today&apos;s Progress</h4>
+        <button
+          className={`btn btn-lg w-full ${todayRecord ? 'btn-success' : 'btn-outline'}`}
+          onClick={handleToggleToday}
+        >
+          {todayRecord ? 'Completed ✓' : 'Mark as Complete'}
+        </button>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-4">
-          <Loader2 className="animate-spin" />
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="card bg-base-200 p-4 text-center">
+          <div className="text-2xl font-bold text-primary">{completedDays}</div>
+          <div className="text-sm text-base-content/70">Days Completed</div>
         </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-7 gap-2">
-            {weekDays.map(({ date, record }) => (
-              <button
-                key={date.toISOString()}
-                className={`p-2 rounded-lg text-center transition-colors ${
-                  isSameDay(date, selectedDate)
-                    ? 'bg-primary text-primary-content'
-                    : record
-                    ? 'bg-success/20'
-                    : 'bg-base-200 hover:bg-base-300'
-                }`}
-                onClick={() => setSelectedDate(date)}
-              >
-                <div className="text-xs">{format(date, 'EEE')}</div>
-                <div className="text-sm font-medium">{format(date, 'd')}</div>
-                {record && (
-                  <div className="mt-1">
-                    {record.value >= habit.target ? (
-                      <Check size={16} className="mx-auto text-success" />
-                    ) : (
-                      <X size={16} className="mx-auto text-error" />
-                    )}
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
+        <div className="card bg-base-200 p-4 text-center">
+          <div className="text-2xl font-bold text-primary">{currentStreak}</div>
+          <div className="text-sm text-base-content/70">Current Streak</div>
+        </div>
+        <div className="card bg-base-200 p-4 text-center">
+          <div className="text-2xl font-bold text-primary">{longestStreak}</div>
+          <div className="text-sm text-base-content/70">Longest Streak</div>
+        </div>
+      </div>
 
-          <div className="card bg-base-200 p-4">
-            <h4 className="font-medium mb-4">
-              Record for {format(selectedDate, 'MMMM d, yyyy')}
-            </h4>
-            <div className="space-y-4">
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Value</span>
-                  <span className="label-text-alt">Target: {habit.target}</span>
-                </label>
-                <input
-                  type="number"
-                  className="input input-bordered"
-                  value={value}
-                  onChange={(e) => setValue(Math.max(1, parseInt(e.target.value) || 1))}
-                  min="1"
+      {/* Activity Graph */}
+      <div className="card bg-base-200 p-4">
+        <h4 className="font-medium mb-4">Activity in Last 90 Days</h4>
+        <div className="flex gap-1">
+          {weeks.map((week, weekIndex) => (
+            <div key={weekIndex} className="flex flex-col gap-1">
+              {week.map((day, dayIndex) => (
+                <div
+                  key={dayIndex}
+                  className={`w-3 h-3 rounded-sm transition-colors ${
+                    day.value > 0
+                      ? 'bg-primary'
+                      : day.isToday
+                      ? 'bg-base-300 ring-1 ring-primary ring-offset-1'
+                      : 'bg-base-300'
+                  }`}
+                  title={`${format(day.date, 'MMM d, yyyy')}: ${
+                    day.value > 0 ? 'Completed' : 'Not completed'
+                  }`}
                 />
-              </div>
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Notes</span>
-                </label>
-                <textarea
-                  className="textarea textarea-bordered"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Add any notes about your progress..."
-                />
-              </div>
-              <button
-                className="btn btn-primary w-full"
-                onClick={handleRecordProgress}
-              >
-                Record Progress
-              </button>
+              ))}
             </div>
+          ))}
+        </div>
+        <div className="mt-4 flex items-center justify-between text-sm text-base-content/70">
+          <span>Less</span>
+          <div className="flex gap-1">
+            <div className="w-3 h-3 rounded-sm bg-base-300" />
+            <div className="w-3 h-3 rounded-sm bg-primary opacity-30" />
+            <div className="w-3 h-3 rounded-sm bg-primary opacity-60" />
+            <div className="w-3 h-3 rounded-sm bg-primary" />
           </div>
-        </>
-      )}
+          <span>More</span>
+        </div>
+      </div>
+
+      {/* Completion Rate */}
+      <div className="card bg-base-200 p-4">
+        <h4 className="font-medium mb-4">Overall Completion Rate</h4>
+        <div className="w-full bg-base-300 rounded-full h-2.5">
+          <div
+            className="bg-primary h-2.5 rounded-full transition-all"
+            style={{ width: `${completionRate}%` }}
+          />
+        </div>
+        <div className="text-right mt-2 text-sm text-base-content/70">
+          {completionRate.toFixed(1)}%
+        </div>
+      </div>
     </div>
   );
 } 

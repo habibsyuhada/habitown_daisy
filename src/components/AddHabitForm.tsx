@@ -1,32 +1,67 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Database } from '@/types/supabase';
+
+type Category = Database['public']['Tables']['habit_categories']['Row'];
+type Habit = Database['public']['Tables']['habit']['Row'] & {
+  category: Category | null;
+};
 
 interface HabitFormData {
   name: string;
   description: string;
-  frequency: string;
   target: number;
-  category: string;
+  uom: string;
+  category_id: number | null;
 }
 
-export default function AddHabitForm({ onClose }: { onClose: () => void }) {
+interface AddHabitFormProps {
+  onClose: () => void;
+  editingHabit?: Habit | null;
+}
+
+export default function AddHabitForm({ onClose, editingHabit }: AddHabitFormProps) {
   const queryClient = useQueryClient();
+  const [categories, setCategories] = useState<Category[]>([]);
   const [formData, setFormData] = useState<HabitFormData>({
-    name: '',
-    description: '',
-    frequency: 'daily',
-    target: 1,
-    category: '',
+    name: editingHabit?.name || '',
+    description: editingHabit?.description || '',
+    target: editingHabit?.target || 1,
+    uom: editingHabit?.uom || 'times',
+    category_id: editingHabit?.category_id || null,
   });
 
-  const createHabitMutation = useMutation({
-    mutationFn: (newHabit: HabitFormData) =>
-      fetch('/api/habits', {
-        method: 'POST',
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  async function fetchCategories() {
+    try {
+      const response = await fetch('/api/categories');
+      if (!response.ok) throw new Error('Failed to fetch categories');
+      const data = await response.json();
+      setCategories(data);
+      
+      // If no category is selected and we have categories, select the first one
+      if (!formData.category_id && data.length > 0) {
+        setFormData(prev => ({ ...prev, category_id: data[0].id }));
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  }
+
+  const mutation = useMutation({
+    mutationFn: (data: HabitFormData) =>
+      fetch(editingHabit ? `/api/habits/${editingHabit.id}` : '/api/habits', {
+        method: editingHabit ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(newHabit),
+        body: JSON.stringify({
+          ...data,
+          frequency: 'daily', // Always set to daily
+        }),
       }).then((res) => res.json()),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['habits'] });
@@ -36,94 +71,88 @@ export default function AddHabitForm({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    createHabitMutation.mutate(formData);
+    mutation.mutate(formData);
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-          Habit Name *
+        <label className="label">
+          <span className="label-text">Name</span>
         </label>
         <input
           type="text"
-          id="name"
-          required
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          className="input input-bordered w-full"
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          required
         />
       </div>
 
       <div>
-        <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-          Description
+        <label className="label">
+          <span className="label-text">Description (optional)</span>
         </label>
         <textarea
-          id="description"
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          className="textarea textarea-bordered w-full"
           value={formData.description}
           onChange={(e) => setFormData({ ...formData, description: e.target.value })}
         />
       </div>
 
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">
+            <span className="label-text">Daily Target</span>
+          </label>
+          <input
+            type="number"
+            min="1"
+            className="input input-bordered w-full"
+            value={formData.target}
+            onChange={(e) => setFormData({ ...formData, target: parseInt(e.target.value) })}
+            required
+          />
+        </div>
+        <div>
+          <label className="label">
+            <span className="label-text">Unit of Measurement</span>
+          </label>
+          <input
+            type="text"
+            className="input input-bordered w-full"
+            value={formData.uom}
+            onChange={(e) => setFormData({ ...formData, uom: e.target.value })}
+            placeholder="times"
+            required
+          />
+        </div>
+      </div>
+
       <div>
-        <label htmlFor="frequency" className="block text-sm font-medium text-gray-700">
-          Frequency
+        <label className="label">
+          <span className="label-text">Category (optional)</span>
         </label>
         <select
-          id="frequency"
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          value={formData.frequency}
-          onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
+          className="select select-bordered w-full"
+          value={formData.category_id || ''}
+          onChange={(e) => setFormData({ ...formData, category_id: e.target.value ? parseInt(e.target.value) : null })}
         >
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
+          <option value="">No Category</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.icon} {category.name}
+            </option>
+          ))}
         </select>
       </div>
 
-      <div>
-        <label htmlFor="target" className="block text-sm font-medium text-gray-700">
-          Daily Target
-        </label>
-        <input
-          type="number"
-          id="target"
-          min="1"
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          value={formData.target}
-          onChange={(e) => setFormData({ ...formData, target: parseInt(e.target.value) })}
-        />
-      </div>
-
-      <div>
-        <label htmlFor="category" className="block text-sm font-medium text-gray-700">
-          Category
-        </label>
-        <input
-          type="text"
-          id="category"
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          value={formData.category}
-          onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-        />
-      </div>
-
-      <div className="flex justify-end space-x-2">
-        <button
-          type="button"
-          onClick={onClose}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-        >
+      <div className="flex justify-end gap-2 mt-6">
+        <button type="button" className="btn" onClick={onClose}>
           Cancel
         </button>
-        <button
-          type="submit"
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
-          disabled={createHabitMutation.isPending}
-        >
-          {createHabitMutation.isPending ? 'Adding...' : 'Add Habit'}
+        <button type="submit" className="btn btn-primary">
+          {editingHabit ? 'Save Changes' : 'Add Habit'}
         </button>
       </div>
     </form>

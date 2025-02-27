@@ -46,7 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { name, description, frequency, target, category_id } = req.body;
+    const { name, description, frequency, target, category_id, uom } = req.body;
 
     if (!name || !frequency) {
       return res.status(400).json({ error: 'Name and frequency are required' });
@@ -60,6 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           description,
           frequency,
           target: target || 1,
+          uom: uom || 'times',
           category_id,
           user_id: user.id,
           created_at: new Date().toISOString(),

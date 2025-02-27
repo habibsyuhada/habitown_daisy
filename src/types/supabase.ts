@@ -84,6 +84,7 @@ export interface Database {
           description: string | null;
           frequency: string;
           target: number;
+          uom: string;
           category_id: number | null;
           user_id: string;
           created_at: string;
@@ -95,6 +96,7 @@ export interface Database {
           description?: string | null;
           frequency: string;
           target?: number;
+          uom?: string;
           category_id?: number | null;
           user_id: string;
           created_at?: string;
@@ -106,6 +108,7 @@ export interface Database {
           description?: string | null;
           frequency?: string;
           target?: number;
+          uom?: string;
           category_id?: number | null;
           user_id?: string;
           created_at?: string;

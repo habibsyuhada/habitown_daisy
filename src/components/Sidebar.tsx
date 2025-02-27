@@ -1,15 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Database } from '@/types/supabase';
 import { useRouter } from 'next/router';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2, Edit2, Trash2, Smile } from 'lucide-react';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 
 type Category = Database['public']['Tables']['habit_categories']['Row'];
 
+interface EditingCategory extends Category {
+  isEditing?: boolean;
+}
+
 export default function Sidebar() {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<EditingCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newCategory, setNewCategory] = useState({ name: '', color: '#4F46E5', icon: '📋' });
+  const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
+  const [activeEmojiPicker, setActiveEmojiPicker] = useState<'new' | 'edit' | null>(null);
   const router = useRouter();
   const { categoryId } = router.query;
 
@@ -29,6 +36,15 @@ export default function Sidebar() {
       setLoading(false);
     }
   }
+
+  const onEmojiClick = (emojiData: EmojiClickData) => {
+    if (activeEmojiPicker === 'new') {
+      setNewCategory(prev => ({ ...prev, icon: emojiData.emoji }));
+    } else if (activeEmojiPicker === 'edit' && editingCategory) {
+      setEditingCategory({ ...editingCategory, icon: emojiData.emoji });
+    }
+    setActiveEmojiPicker(null);
+  };
 
   async function handleAddCategory(e: React.FormEvent) {
     e.preventDefault();
@@ -51,80 +67,284 @@ export default function Sidebar() {
     }
   }
 
+  async function handleUpdateCategory(category: EditingCategory) {
+    try {
+      const response = await fetch(`/api/categories/${category.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: category.name,
+          color: category.color,
+          icon: category.icon,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update category');
+      
+      setEditingCategory(null);
+      fetchCategories();
+    } catch (error) {
+      console.error('Error updating category:', error);
+    }
+  }
+
+  async function handleDeleteCategory(categoryId: number) {
+    if (!confirm('Are you sure you want to delete this category? All associated habits will be moved to uncategorized.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/categories/${categoryId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) throw new Error('Failed to delete category');
+      
+      fetchCategories();
+      router.push('/');
+    } catch (error) {
+      console.error('Error deleting category:', error);
+    }
+  }
+
   return (
-    <div className="w-64 bg-base-200 h-screen p-4">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold">Categories</h2>
-        <button
-          className="btn btn-circle btn-sm btn-ghost"
-          onClick={() => setShowAddForm(!showAddForm)}
-        >
-          <Plus size={20} />
-        </button>
-      </div>
-
-      {showAddForm && (
-        <form onSubmit={handleAddCategory} className="mb-4">
-          <div className="form-control">
-            <input
-              type="text"
-              placeholder="Category name"
-              className="input input-bordered input-sm mb-2"
-              value={newCategory.name}
-              onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
-              required
-            />
-            <div className="flex gap-2 mb-2">
-              <input
-                type="color"
-                className="input input-bordered input-sm w-1/2"
-                value={newCategory.color}
-                onChange={(e) => setNewCategory({ ...newCategory, color: e.target.value })}
-              />
-              <input
-                type="text"
-                placeholder="Icon"
-                className="input input-bordered input-sm w-1/2"
-                value={newCategory.icon}
-                onChange={(e) => setNewCategory({ ...newCategory, icon: e.target.value })}
-              />
-            </div>
-            <button type="submit" className="btn btn-primary btn-sm">Add Category</button>
-          </div>
-        </form>
-      )}
-
-      {loading ? (
-        <div className="flex justify-center items-center h-32">
-          <Loader2 className="animate-spin" />
+    <>
+      <div className="w-64 bg-base-200 min-h-screen p-4 shadow-lg">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">Categories</h2>
+          <button
+            className="btn btn-circle btn-sm btn-primary btn-outline"
+            onClick={() => setShowAddForm(true)}
+          >
+            <Plus size={20} />
+          </button>
         </div>
-      ) : (
-        <ul className="menu bg-base-200 rounded-box">
-          <li>
+
+        {showAddForm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="modal-box w-11/12 max-w-2xl">
+              <h3 className="text-2xl font-bold mb-6 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                Add New Category
+              </h3>
+              <form onSubmit={handleAddCategory} className="space-y-4">
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text font-medium">Name</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Category name"
+                    className="input input-bordered w-full"
+                    value={newCategory.name}
+                    onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
+                    required
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">
+                      <span className="label-text font-medium">Icon</span>
+                    </label>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        className="btn btn-outline w-full"
+                        onClick={() => setActiveEmojiPicker('new')}
+                      >
+                        {newCategory.icon} <Smile size={16} />
+                      </button>
+                      {activeEmojiPicker === 'new' && (
+                        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100]">
+                          <div className="relative">
+                            <button 
+                              className="fixed inset-0 bg-transparent"
+                              onClick={() => setActiveEmojiPicker(null)}
+                            />
+                            <div className="bg-base-100 rounded-lg shadow-xl">
+                              <EmojiPicker
+                                onEmojiClick={onEmojiClick}
+                                width={350}
+                                height={450}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="label">
+                      <span className="label-text font-medium">Color</span>
+                    </label>
+                    <input
+                      type="color"
+                      className="input input-bordered w-full h-12"
+                      value={newCategory.color}
+                      onChange={(e) => setNewCategory({ ...newCategory, color: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 mt-6 pt-4 border-t">
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => setShowAddForm(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Add Category
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex justify-center items-center h-32">
+            <Loader2 className="animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="space-y-2">
             <button
-              className={`flex items-center gap-2 ${!categoryId ? 'active' : ''}`}
+              className={`w-full btn btn-ghost justify-start gap-2 ${!categoryId ? 'btn-active' : ''}`}
               onClick={() => router.push('/')}
             >
               📊 All Habits
             </button>
-          </li>
-          {categories.map((category) => (
-            <li key={category.id}>
-              <button
-                className={`flex items-center gap-2 ${
-                  categoryId === category.id.toString() ? 'active' : ''
-                }`}
-                onClick={() => router.push(`/?categoryId=${category.id}`)}
-                style={{
-                  borderLeft: `4px solid ${category.color || '#4F46E5'}`,
-                }}
+            {categories.map((category) => (
+              <div
+                key={category.id}
+                className="group relative rounded-lg hover:bg-base-300 transition-all duration-200"
               >
-                {category.icon || '📋'} {category.name}
-              </button>
-            </li>
-          ))}
-        </ul>
+                <button
+                  className={`w-full btn btn-ghost justify-start gap-2 ${
+                    categoryId === category.id.toString() ? 'btn-active' : ''
+                  }`}
+                  onClick={() => router.push(`/?categoryId=${category.id}`)}
+                  style={{
+                    borderLeft: `4px solid ${category.color || '#4F46E5'}`,
+                  }}
+                >
+                  <span className="text-xl">{category.icon || '📋'}</span>
+                  <span className="flex-1 text-left">{category.name}</span>
+                </button>
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1">
+                  <button
+                    className="btn btn-circle btn-ghost btn-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingCategory(category);
+                    }}
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                  <button
+                    className="btn btn-circle btn-ghost btn-xs text-error"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteCategory(category.id);
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Edit Category Modal */}
+      {editingCategory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="modal-box w-11/12 max-w-2xl">
+            <h3 className="text-2xl font-bold mb-6 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+              Edit Category
+            </h3>
+            <div className="space-y-4">
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text font-medium">Name</span>
+                </label>
+                <input
+                  type="text"
+                  className="input input-bordered w-full"
+                  value={editingCategory.name || ''}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                  placeholder="Category name"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">
+                    <span className="label-text font-medium">Icon</span>
+                  </label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      className="btn btn-outline w-full"
+                      onClick={() => setActiveEmojiPicker('edit')}
+                    >
+                      {editingCategory.icon || '📋'} <Smile size={16} />
+                    </button>
+                    {activeEmojiPicker === 'edit' && (
+                      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100]">
+                        <div className="relative">
+                          <button 
+                            className="fixed inset-0 bg-transparent"
+                            onClick={() => setActiveEmojiPicker(null)}
+                          />
+                          <div className="bg-base-100 rounded-lg shadow-xl">
+                            <EmojiPicker
+                              onEmojiClick={onEmojiClick}
+                              width={350}
+                              height={450}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label">
+                    <span className="label-text font-medium">Color</span>
+                  </label>
+                  <input
+                    type="color"
+                    className="input input-bordered w-full h-12"
+                    value={editingCategory.color || '#4F46E5'}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, color: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 mt-6 pt-4 border-t">
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => setEditingCategory(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => handleUpdateCategory(editingCategory)}
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
-    </div>
+    </>
   );
 } 

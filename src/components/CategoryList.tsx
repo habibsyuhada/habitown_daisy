@@ -19,6 +19,9 @@ interface CategoryListProps {
   onCategoryClick?: (categoryId: string | null) => void;
   variant: 'mobile' | 'desktop';
   className?: string;
+  onAddClick?: () => void;
+  onEditClick?: React.Dispatch<React.SetStateAction<Category | null>>;
+  onDeleteClick?: (categoryId: number) => Promise<void>;
 }
 
 export default function CategoryList({ 
@@ -26,7 +29,10 @@ export default function CategoryList({
   categoryId, 
   onCategoryClick, 
   variant, 
-  className = ''
+  className = '',
+  onAddClick,
+  onEditClick,
+  onDeleteClick
 }: CategoryListProps) {
   const router = useRouter();
   const isDesktop = variant === 'desktop';
@@ -107,6 +113,20 @@ export default function CategoryList({
           />
         </motion.button>
       ))}
+      
+      {/* Management buttons - only shown if the props are provided */}
+      {isDesktop && (onAddClick || onEditClick || onDeleteClick) && (
+        <div className="mt-4 flex flex-col gap-2">
+          {onAddClick && (
+            <button 
+              onClick={onAddClick}
+              className="btn btn-sm btn-outline w-full"
+            >
+              Add Category
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 } 

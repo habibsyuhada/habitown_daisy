@@ -1,33 +1,47 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import prisma from '@/lib/prisma';
+import { createAdminClient } from '@/lib/supabase';
+
+// Define a type for the habit record
+interface HabitRecord {
+  id: number;
+  habit_id: number;
+  date: string | Date;
+  value: number;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
 
   if (req.method === 'GET') {
     try {
+      const supabase = createAdminClient();
       const now = new Date();
       const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
       // Get habit records
-      const records = await prisma.habitRecord.findMany({
-        where: {
-          habitId: Number(id),
-          completed: true,
-        },
-        orderBy: {
-          date: 'desc',
-        },
-      });
+      const { data: records, error } = await supabase
+        .from('habit_records')
+        .select('*')
+        .eq('habit_id', Number(id))
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      
+      if (!records) {
+        return res.status(404).json({ error: 'No records found' });
+      }
 
       // Calculate statistics
-      const weeklyStats = records.filter(record => 
-        record.date >= startOfWeek
+      const weeklyStats = records.filter((record: HabitRecord) => 
+        new Date(record.date) >= startOfWeek
       ).length;
 
-      const monthlyStats = records.filter(record => 
-        record.date >= startOfMonth
+      const monthlyStats = records.filter((record: HabitRecord) => 
+        new Date(record.date) >= startOfMonth
       ).length;
 
       // Calculate current streak

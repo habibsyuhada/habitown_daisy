@@ -55,6 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         totalCompletions: records.length,
       });
     } catch (error) {
+      console.error('Error fetching habit statistics:', error);
       res.status(500).json({ error: 'Failed to fetch habit statistics' });
     }
   }

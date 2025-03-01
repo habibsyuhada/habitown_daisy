@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Database } from '@/types/supabase';
 
@@ -31,11 +31,7 @@ export default function AddHabitForm({ onClose, editingHabit }: AddHabitFormProp
     category_id: editingHabit?.category_id || null,
   });
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  async function fetchCategories() {
+  const fetchCategories = useCallback(async () => {
     try {
       const response = await fetch('/api/categories');
       if (!response.ok) throw new Error('Failed to fetch categories');
@@ -49,7 +45,11 @@ export default function AddHabitForm({ onClose, editingHabit }: AddHabitFormProp
     } catch (error) {
       console.error('Error fetching categories:', error);
     }
-  }
+  }, [formData.category_id]);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   const mutation = useMutation({
     mutationFn: (data: HabitFormData) =>

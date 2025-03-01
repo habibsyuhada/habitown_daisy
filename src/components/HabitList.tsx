@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Plus, Loader2, BarChart2, Home, Search, Castle, Settings } from 'lucide-react';
 import HabitProgress from './HabitProgress';
 import AddHabitForm from './AddHabitForm';
@@ -58,19 +58,45 @@ export default function HabitList({ categoryId }: HabitListProps) {
   const router = useRouter();
   const [habits, setHabits] = useState<EditingHabit[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [selectedHabit, setSelectedHabit] = useState<EditingHabit | null>(null);
-  const [editingHabit, setEditingHabit] = useState<EditingHabit | null>(null);
-  const [showCategoryDrawer, setShowCategoryDrawer] = useState(false);
+  const [isAddHabitOpen, setIsAddHabitOpen] = useState(false);
+  const [selectedHabit, setSelectedHabit] = useState<Habit | null>(null);
+  const [isCategoryDrawerOpen, setIsCategoryDrawerOpen] = useState(false);
   const [showStatsDrawer, setShowStatsDrawer] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
 
-  useEffect(() => {
-    fetchHabits();
-    fetchCategories();
+  const fetchHabits = useCallback(async () => {
+    try {
+      const url = categoryId ? `/api/habits?categoryId=${categoryId}` : '/api/habits';
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Failed to fetch habits');
+      const habitsData = await response.json();
+
+      // Fetch today's records for each habit
+      const today = new Date().toISOString().split('T')[0];
+      const recordsResponse = await fetch(`/api/habit-records?date=${today}`);
+      if (!recordsResponse.ok) throw new Error('Failed to fetch records');
+      const recordsData = await recordsResponse.json();
+
+      // Map records to habits
+      const habitsWithRecords = habitsData.map((habit: Habit) => {
+        const todayRecord = recordsData.find(
+          (record: HabitRecord) => record.habit_id === habit.id
+        );
+        return {
+          ...habit,
+          todayRecord,
+        };
+      });
+
+      setHabits(habitsWithRecords);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching habits:', error);
+      setLoading(false);
+    }
   }, [categoryId]);
 
-  async function fetchCategories() {
+  const fetchCategories = useCallback(async () => {
     try {
       const response = await fetch('/api/categories');
       if (!response.ok) throw new Error('Failed to fetch categories');
@@ -79,58 +105,12 @@ export default function HabitList({ categoryId }: HabitListProps) {
     } catch (error) {
       console.error('Error fetching categories:', error);
     }
-  }
+  }, []);
 
-  async function fetchHabits() {
-    try {
-      const url = categoryId ? `/api/habits?categoryId=${categoryId}` : '/api/habits';
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Failed to fetch habits');
-      const data = await response.json();
-
-      // Get today's date in YYYY-MM-DD format
-      const today = new Date();
-      const todayStr = today.toISOString().split('T')[0] + ' 00:00:00'; // Format: YYYY-MM-DD HH:mm:ss
-      
-      const recordsResponse = await fetch(`/api/habit-records?start_date=${todayStr}&end_date=${todayStr}`);
-      if (!recordsResponse.ok) throw new Error('Failed to fetch records');
-      const records = await recordsResponse.json();
-
-      // Combine habits with their today's records
-      const habitsWithRecords = data.map((habit: Habit) => {
-        const record = records.find((r: HabitRecord) => r.habit_id === habit.id);
-        return {
-          ...habit,
-          todayRecord: record,
-        };
-      });
-
-      // Sort habits: incomplete first, then completed
-      const sortedHabits = habitsWithRecords.sort((a: EditingHabit, b: EditingHabit) => {
-        const aCompleted = (a.todayRecord?.value || 0) >= a.target;
-        const bCompleted = (b.todayRecord?.value || 0) >= b.target;
-        if (aCompleted === bCompleted) return 0;
-        return aCompleted ? 1 : -1;
-      });
-
-      setHabits(sortedHabits);
-      
-      // If there's only one habit, select it automatically
-      if (sortedHabits && sortedHabits.length === 1) {
-        setSelectedHabit(sortedHabits[0]);
-      } else if (selectedHabit) {
-        // Update selectedHabit with the new data if it exists
-        const updatedSelectedHabit = sortedHabits.find((h: EditingHabit) => h.id === selectedHabit.id);
-        if (updatedSelectedHabit) {
-          setSelectedHabit(updatedSelectedHabit);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching habits:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
+  useEffect(() => {
+    fetchHabits();
+    fetchCategories();
+  }, [categoryId, fetchHabits, fetchCategories]);
 
   async function handleDeleteHabit(habitId: number) {
     if (!confirm('Are you sure you want to delete this habit? This action cannot be undone.')) {
@@ -258,7 +238,7 @@ export default function HabitList({ categoryId }: HabitListProps) {
             </h2>
             <button
               className="btn btn-ghost btn-sm bg-white hover:bg-base-200"
-              onClick={() => setShowAddForm(true)}
+              onClick={() => setIsAddHabitOpen(true)}
             >
               <Plus size={16} />
               <span className="ml-1 text-sm font-medium">Add Habit</span>
@@ -282,7 +262,7 @@ export default function HabitList({ categoryId }: HabitListProps) {
                       isSelected={selectedHabit?.id === habit.id}
                       onSelect={setSelectedHabit}
                       onComplete={handleToggleComplete}
-                      onEdit={setEditingHabit}
+                      onEdit={setSelectedHabit}
                       onDelete={handleDeleteHabit}
                       onMobileClick={(habit) => {
                         setSelectedHabit(habit);
@@ -375,8 +355,8 @@ export default function HabitList({ categoryId }: HabitListProps) {
           <Home size={18} />
         </button>
         <button
-          onClick={() => setShowCategoryDrawer(true)}
-          className={`${showCategoryDrawer ? 'text-primary' : 'text-base-content/50'} active:bg-primary/5`}
+          onClick={() => setIsCategoryDrawerOpen(true)}
+          className={`${isCategoryDrawerOpen ? 'text-primary' : 'text-base-content/50'} active:bg-primary/5`}
         >
           <Search size={18} />
         </button>
@@ -396,26 +376,26 @@ export default function HabitList({ categoryId }: HabitListProps) {
 
       {/* Category Drawer */}
       <CategoryDrawer 
-        isOpen={showCategoryDrawer}
-        onClose={() => setShowCategoryDrawer(false)}
+        isOpen={isCategoryDrawerOpen}
+        onClose={() => setIsCategoryDrawerOpen(false)}
         categories={categories}
         categoryId={categoryId}
       />
 
       {/* Add/Edit Habit Modal */}
-      {(showAddForm || editingHabit) && (
+      {(isAddHabitOpen || selectedHabit) && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="modal-box w-full max-w-lg">
             <h3 className="text-lg font-semibold mb-4">
-              {editingHabit ? 'Edit Habit' : 'Add New Habit'}
+              {selectedHabit ? 'Edit Habit' : 'Add New Habit'}
             </h3>
             <AddHabitForm
               onClose={() => {
-                setShowAddForm(false);
-                setEditingHabit(null);
+                setIsAddHabitOpen(false);
+                setSelectedHabit(null);
                 fetchHabits();
               }}
-              editingHabit={editingHabit}
+              editingHabit={selectedHabit}
             />
           </div>
         </div>

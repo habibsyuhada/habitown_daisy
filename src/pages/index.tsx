@@ -25,7 +25,9 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-base-100">
       <div className="flex">
-        <Sidebar />
+        <div className="hidden lg:block">
+          <Sidebar />
+        </div>
         <main className="flex-1 p-8">
           <HabitList categoryId={categoryId as string} />
         </main>

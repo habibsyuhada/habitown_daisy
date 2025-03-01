@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Database } from '@/types/supabase';
 import { useRouter } from 'next/router';
-import { Plus, Loader2, Edit2, Trash2, Smile } from 'lucide-react';
+import { Plus, Loader2, Edit2, Trash2, Smile, Castle, ChevronRight } from 'lucide-react';
+import { motion } from 'framer-motion';
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 
 type Category = Database['public']['Tables']['habit_categories']['Row'];
@@ -111,15 +112,17 @@ export default function Sidebar() {
 
   return (
     <>
-      <div className="w-64 bg-base-200 min-h-screen p-4 shadow-lg">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">Categories</h2>
-          <button
+      <div className="w-64 bg-gradient-to-b from-base-100 to-base-200 min-h-screen p-6 shadow-lg">
+        <div className="flex justify-between items-center mb-8">
+          <h2 className="text-lg font-semibold text-base-content">Categories</h2>
+          <motion.button
             className="btn btn-circle btn-sm btn-primary btn-outline"
             onClick={() => setShowAddForm(true)}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
           >
-            <Plus size={20} />
-          </button>
+            <Plus size={18} />
+          </motion.button>
         </div>
 
         {showAddForm && (
@@ -211,50 +214,94 @@ export default function Sidebar() {
           </div>
         ) : (
           <div className="space-y-2">
-            <button
-              className={`w-full btn btn-ghost justify-start gap-2 ${!categoryId ? 'btn-active' : ''}`}
+            <motion.button
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                !categoryId 
+                  ? 'bg-primary text-primary-content shadow-lg shadow-primary/20' 
+                  : 'text-base-content/70 hover:bg-base-200/50'
+              }`}
               onClick={() => router.push('/')}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
-              📊 All Habits
-            </button>
-            {categories.map((category) => (
-              <div
+              <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                !categoryId ? 'bg-primary-content/20' : 'bg-primary/10'
+              }`}>
+                <Castle size={20} className={!categoryId ? 'text-primary-content' : 'text-primary'} />
+              </span>
+              <span className="flex-1 text-base font-medium text-left">All Habits</span>
+              <ChevronRight size={18} className={!categoryId ? 'text-primary-content/70' : 'text-base-content/30'} />
+            </motion.button>
+
+            {categories.map((category, index) => (
+              <motion.div
                 key={category.id}
-                className="group relative rounded-lg hover:bg-base-300 transition-all duration-200"
+                className="group relative"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 + index * 0.05 }}
               >
-                <button
-                  className={`w-full btn btn-ghost justify-start gap-2 ${
-                    categoryId === category.id.toString() ? 'btn-active' : ''
+                <motion.button
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                    categoryId === category.id.toString()
+                      ? 'bg-primary text-primary-content shadow-lg shadow-primary/20'
+                      : 'text-base-content/70 hover:bg-base-200/50'
                   }`}
                   onClick={() => router.push(`/?categoryId=${category.id}`)}
-                  style={{
-                    borderLeft: `4px solid ${category.color || '#4F46E5'}`,
-                  }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                 >
-                  <span className="text-xl">{category.icon || '📋'}</span>
-                  <span className="flex-1 text-left">{category.name}</span>
-                </button>
+                  <span 
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                      categoryId === category.id.toString() 
+                        ? 'bg-primary-content/20' 
+                        : ''
+                    }`}
+                    style={{ 
+                      backgroundColor: categoryId === category.id.toString() 
+                        ? undefined 
+                        : `${category.color}15` || '#4F46E515',
+                      color: categoryId === category.id.toString() 
+                        ? 'inherit'
+                        : category.color || '#4F46E5'
+                    }}
+                  >
+                    <span className="text-xl">{category.icon}</span>
+                  </span>
+                  <span className="flex-1 text-base font-medium text-left">{category.name}</span>
+                  <ChevronRight 
+                    size={18} 
+                    className={categoryId === category.id.toString() 
+                      ? 'text-primary-content/70' 
+                      : 'text-base-content/30'
+                    } 
+                  />
+                </motion.button>
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1">
-                  <button
+                  <motion.button
                     className="btn btn-circle btn-ghost btn-xs"
                     onClick={(e) => {
                       e.stopPropagation();
                       setEditingCategory(category);
                     }}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
                   >
                     <Edit2 size={14} />
-                  </button>
-                  <button
+                  </motion.button>
+                  <motion.button
                     className="btn btn-circle btn-ghost btn-xs text-error"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDeleteCategory(category.id);
                     }}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
                   >
                     <Trash2 size={14} />
-                  </button>
+                  </motion.button>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         )}

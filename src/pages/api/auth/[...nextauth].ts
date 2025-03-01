@@ -1,11 +1,12 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import NextAuth from 'next-auth';
-import { decode } from 'jsonwebtoken';
-import { supabase, createAdminClient } from '@/lib/supabase';
+import jwt from 'jsonwebtoken';
+import { JwtPayload } from 'jsonwebtoken';
+import { createClient } from '@supabase/supabase-js';
 
 if (!process.env.NEXTAUTH_SECRET) {
-  throw new Error('Please provide NEXTAUTH_SECRET environment variable');
+  throw new Error('Please set NEXTAUTH_SECRET environment variable');
 }
 
 const secret = process.env.NEXTAUTH_SECRET;
@@ -18,12 +19,11 @@ export const authOptions: NextAuthOptions = {
   },
   providers: [
     CredentialsProvider({
-      name: 'credentials',
+      id: 'credentials',
+      name: 'Credentials',
       credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
-        isTokenAuth: { label: 'Is Token Auth', type: 'boolean' },
         token: { label: 'Token', type: 'text' },
+        isTokenAuth: { label: 'Is Token Auth', type: 'text' },
       },
       async authorize(credentials) {
         if (!credentials) {
@@ -36,73 +36,73 @@ export const authOptions: NextAuthOptions = {
             console.log('Attempting to decode token');
             console.log('Received token:', credentials.token);
 
-            // Just decode the token without verification
-            const decoded = decode(credentials.token) as {
-              id: string;
-              email: string;
-              name?: string;
-            };
+            const decoded = jwt.verify(credentials.token, process.env.SUPABASE_JWT_SECRET!) as JwtPayload;
 
-            if (!decoded || !decoded.email) {
-              throw new Error('Invalid token format');
+            const supabase = createClient(
+              process.env.NEXT_PUBLIC_SUPABASE_URL!,
+              process.env.SUPABASE_SERVICE_ROLE_KEY!
+            );
+
+            // Check if user exists
+            const { data: existingUser, error: fetchError } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', decoded.sub)
+              .single();
+
+            if (fetchError && fetchError.code !== 'PGRST116') {
+              throw new Error(fetchError.message);
             }
-
-            console.log('Decoded token:', decoded);
-
-            const supabaseAdmin = createAdminClient();
-            // Check if user exists in Supabase auth by email
-            const { data: users, error: userError } = await supabaseAdmin.auth.admin.listUsers();
-
-            if (userError) {
-              console.error('Error fetching users:', userError);
-              throw new Error('Error fetching users');
-            }
-
-            const existingUser = users.users.find(u => u.email === decoded.email);
 
             if (!existingUser) {
-              console.log('Creating new user with data:', {
-                email: decoded.email,
-                name: decoded.name || decoded.email.split('@')[0],
-              });
-
-              // Create user if doesn't exist
-              const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+              // Create new user
+              const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
                 email: decoded.email,
                 email_confirm: true,
                 user_metadata: {
-                  name: decoded.name || decoded.email.split('@')[0],
+                  full_name: decoded.name,
+                  avatar_url: decoded.picture,
                 },
-                app_metadata: {
-                  provider: 'external',
-                }
+                id: decoded.sub,
               });
 
-              if (createError || !newUser.user) {
-                console.error('Error creating user:', createError);
-                throw new Error('Error creating user');
+              if (createError) {
+                throw new Error(createError.message);
               }
 
-              console.log('New user created:', newUser.user);
+              // Insert into users table
+              const { error: insertError } = await supabase
+                .from('users')
+                .insert([
+                  {
+                    id: newUser.user.id,
+                    email: newUser.user.email,
+                    name: decoded.name,
+                    avatar_url: decoded.picture,
+                  },
+                ]);
+
+              if (insertError) {
+                throw new Error(insertError.message);
+              }
+
               return {
                 id: newUser.user.id,
-                email: newUser.user.email!,
-                name: newUser.user.user_metadata?.name,
+                email: newUser.user.email,
+                name: decoded.name,
+                image: decoded.picture,
               };
             }
 
-            console.log('Existing user found:', existingUser);
             return {
               id: existingUser.id,
-              email: existingUser.email!,
-              name: existingUser.user_metadata?.name,
+              email: existingUser.email,
+              name: existingUser.name,
+              image: existingUser.avatar_url,
             };
           } catch (error) {
-            console.error('Token processing failed. Error details:', error);
-            if (error instanceof Error) {
-              throw new Error(`Token processing failed: ${error.message}`);
-            }
-            throw new Error('Token processing failed');
+            console.error('Error in authorize:', error);
+            throw error;
           }
         }
 

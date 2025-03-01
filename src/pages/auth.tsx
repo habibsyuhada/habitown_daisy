@@ -9,24 +9,18 @@ export default function Auth() {
   useEffect(() => {
     const handleAuth = async () => {
       if (!token) {
-        console.log('No token provided');
         router.replace('/auth/error?error=No token provided');
         return;
       }
 
       try {
-        console.log('Starting authentication with token');
-        console.log('Token length:', token.length);
-        
         // Sign in using next-auth credentials provider with the token
         const result = await signIn('credentials', {
           token: token,
-          isTokenAuth: 'true', // Make sure this is a string 'true'
+          isTokenAuth: 'true',
           redirect: false,
           callbackUrl: '/',
         });
-
-        console.log('Sign in result:', result);
 
         if (result?.error) {
           throw new Error(result.error);
@@ -54,9 +48,8 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="text-center">
-        <div className="loading loading-spinner loading-lg"></div>
-        <p className="mt-4">Authenticating...</p>
+      <div className="animate-pulse">
+        Authenticating...
       </div>
     </div>
   );

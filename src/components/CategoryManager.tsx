@@ -1,25 +1,30 @@
-import { useEffect, useState } from 'react';
-import { Database } from '@/types/supabase';
-import { useRouter } from 'next/router';
-import { Loader2, Smile } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Loader2, Edit2, Trash2, Smile } from 'lucide-react';
+import { motion } from 'framer-motion';
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
-import CategoryList from './CategoryList';
 
-type Category = Database['public']['Tables']['habit_categories']['Row'];
+type Category = {
+  id: number;
+  name: string;
+  description: string | null;
+  color: string | null;
+  icon: string | null;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+};
 
 interface EditingCategory extends Category {
   isEditing?: boolean;
 }
 
-export default function Sidebar() {
+export default function CategoryManager() {
   const [categories, setCategories] = useState<EditingCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newCategory, setNewCategory] = useState({ name: '', color: '#4F46E5', icon: '📋' });
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
   const [activeEmojiPicker, setActiveEmojiPicker] = useState<'new' | 'edit' | null>(null);
-  const router = useRouter();
-  const { categoryId } = router.query;
 
   useEffect(() => {
     fetchCategories();
@@ -104,34 +109,73 @@ export default function Sidebar() {
       if (!response.ok) throw new Error('Failed to delete category');
       
       fetchCategories();
-      router.push('/');
     } catch (error) {
       console.error('Error deleting category:', error);
     }
   }
 
   return (
-    <>
-      <div className="w-64 bg-gradient-to-b from-base-100 to-base-200 min-h-screen p-6 shadow-lg">
-        <div className="flex justify-between items-center mb-8">
-          <h2 className="text-lg font-semibold text-base-content">Categories</h2>
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center items-center h-32">
-            <Loader2 className="animate-spin text-primary" />
-          </div>
-        ) : (
-          <CategoryList
-            categories={categories}
-            categoryId={categoryId?.toString()}
-            variant="desktop"
-            onAddClick={() => setShowAddForm(true)}
-            onEditClick={setEditingCategory}
-            onDeleteClick={handleDeleteCategory}
-          />
-        )}
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+          Category Management
+        </h2>
+        <motion.button
+          className="btn btn-primary btn-sm gap-2"
+          onClick={() => setShowAddForm(true)}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+        >
+          <Plus size={16} />
+          Add Category
+        </motion.button>
       </div>
+
+      {loading ? (
+        <div className="flex justify-center items-center h-32">
+          <Loader2 className="animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {categories.map((category) => (
+            <div
+              key={category.id}
+              className="flex items-center justify-between bg-base-100/50 backdrop-blur-sm rounded-xl shadow-sm"
+            >
+              <div className="flex items-center gap-3">
+                <span
+                  className="w-10 h-10 rounded-xl flex items-center justify-center"
+                  style={{ 
+                    backgroundColor: `${category.color}15` || '#4F46E515',
+                    color: category.color || '#4F46E5'
+                  }}
+                >
+                  <span className="text-xl">{category.icon}</span>
+                </span>
+                <span className="font-medium">{category.name}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <motion.button
+                  className="btn btn-ghost btn-sm btn-square"
+                  onClick={() => setEditingCategory(category)}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <Edit2 size={16} />
+                </motion.button>
+                <motion.button
+                  className="btn btn-ghost btn-sm btn-square text-error"
+                  onClick={() => handleDeleteCategory(category.id)}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <Trash2 size={16} />
+                </motion.button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Add Category Modal */}
       {showAddForm && (
@@ -279,6 +323,6 @@ export default function Sidebar() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 } 

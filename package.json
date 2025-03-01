@@ -24,6 +24,7 @@
     "next-auth": "^4.24.11",
     "pg": "^8.13.3",
     "react": "^19.0.0",
+    "react-day-picker": "^9.5.1",
     "react-dom": "^19.0.0",
     "react-redux": "^9.2.0"
   },

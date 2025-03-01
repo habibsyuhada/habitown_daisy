@@ -1,7 +1,8 @@
-import { X, Search, Castle, ChevronRight } from 'lucide-react';
+import { X, Search } from 'lucide-react';
 import { Database } from '@/types/supabase';
-import { useRouter } from 'next/router';
 import { motion } from 'framer-motion';
+import CategoryList from './CategoryList';
+import { useRouter } from 'next/router';
 
 interface CategoryDrawerProps {
   isOpen: boolean;
@@ -10,7 +11,12 @@ interface CategoryDrawerProps {
   categoryId?: string;
 }
 
-export default function CategoryDrawer({ isOpen, onClose, categories, categoryId }: CategoryDrawerProps) {
+export default function CategoryDrawer({ 
+  isOpen, 
+  onClose, 
+  categories, 
+  categoryId
+}: CategoryDrawerProps) {
   const router = useRouter();
 
   if (!isOpen) return null;
@@ -47,80 +53,15 @@ export default function CategoryDrawer({ isOpen, onClose, categories, categoryId
         </div>
         
         <div className="p-4">
-          <ul className="space-y-2">
-            <motion.li
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-            >
-              <a 
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  !categoryId 
-                    ? 'bg-primary text-primary-content shadow-lg shadow-primary/20' 
-                    : 'text-base-content/70 hover:bg-base-200/50'
-                }`}
-                onClick={() => {
-                  router.push('/');
-                  onClose();
-                }}
-              >
-                <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                  !categoryId ? 'bg-primary-content/20' : 'bg-primary/10'
-                }`}>
-                  <Castle size={20} className={!categoryId ? 'text-primary-content' : 'text-primary'} />
-                </span>
-                <span className="flex-1 text-base font-medium">All Habits</span>
-                <ChevronRight size={18} className={!categoryId ? 'text-primary-content/70' : 'text-base-content/30'} />
-              </a>
-            </motion.li>
-            
-            {categories.map((category, index) => (
-              <motion.li 
-                key={category.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 + (index + 1) * 0.05 }}
-              >
-                <a 
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                    categoryId === category.id.toString()
-                      ? 'bg-primary text-primary-content shadow-lg shadow-primary/20'
-                      : 'text-base-content/70 hover:bg-base-200/50'
-                  }`}
-                  onClick={() => {
-                    router.push(`/?category=${category.id}`);
-                    onClose();
-                  }}
-                >
-                  <span 
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                      categoryId === category.id.toString() 
-                        ? 'bg-primary-content/20' 
-                        : ''
-                    }`}
-                    style={{ 
-                      backgroundColor: categoryId === category.id.toString() 
-                        ? undefined 
-                        : `${category.color}15` || '#4F46E515',
-                      color: categoryId === category.id.toString() 
-                        ? 'inherit'
-                        : category.color || '#4F46E5'
-                    }}
-                  >
-                    <span className="text-xl">{category.icon}</span>
-                  </span>
-                  <span className="flex-1 text-base font-medium">{category.name}</span>
-                  <ChevronRight 
-                    size={18} 
-                    className={categoryId === category.id.toString() 
-                      ? 'text-primary-content/70' 
-                      : 'text-base-content/30'
-                    } 
-                  />
-                </a>
-              </motion.li>
-            ))}
-          </ul>
+          <CategoryList
+            categories={categories}
+            categoryId={categoryId}
+            variant="mobile"
+            onCategoryClick={(categoryId) => {
+              router.push(categoryId ? `/?categoryId=${categoryId}` : '/');
+              onClose();
+            }}
+          />
         </div>
       </motion.div>
     </motion.div>
